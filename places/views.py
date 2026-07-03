@@ -1,5 +1,5 @@
 """Views for browsing places and their GVA per head."""
-from django.db.models import Max, OuterRef, Subquery
+from django.db.models import F, OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from django.views.generic import DetailView, ListView
 
@@ -16,29 +16,22 @@ class PlaceListView(ListView):
     def get_queryset(self):
         level = self.request.GET.get("level", "LAD")
 
-        # Each place's most recent year that has a per-head figure.
-        latest_year = (
-            GvaPerHead.objects.filter(geography=OuterRef("pk"))
-            .order_by("-year")
-            .values("year")[:1]
-        )
-        latest = (
-            GvaPerHead.objects.filter(
-                geography=OuterRef("pk"), year=Subquery(latest_year)
-            )
-            .values("gva_per_head_gbp")[:1]
-        )
+        # GvaPerHead is ordered by -year, so the first row per geography is
+        # the most recent one. Pull its year and value directly — no nested
+        # subquery (a nested OuterRef would resolve against the wrong model).
+        per_head = GvaPerHead.objects.filter(geography=OuterRef("pk")).order_by("-year")
 
         qs = (
             Geography.objects.filter(level__code=level)
             .select_related("level", "parent")
             .annotate(
-                latest_year=Subquery(latest_year),
-                latest_per_head=Subquery(latest),
+                latest_year=Subquery(per_head.values("year")[:1]),
+                latest_per_head=Subquery(per_head.values("gva_per_head_gbp")[:1]),
             )
         )
-        # Rank places that have a figure first (descending), then the rest.
-        return qs.order_by("-latest_per_head", "name")
+        # Rank places with a figure first (descending); the rest fall to the
+        # end (NULLs sort last under descending order) alphabetically.
+        return qs.order_by(F("latest_per_head").desc(nulls_last=True), "name")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
