@@ -50,6 +50,15 @@ class Command(BaseCommand):
             help="GeographyLevel code for unseen geography codes (default: LAD).",
         )
         parser.add_argument(
+            "--industry-total",
+            default="Total",
+            help=(
+                "When a sheet has a SIC/industry column, only ingest rows whose "
+                "industry equals this (default: Total). Matched case-insensitively; "
+                "'All industries' is also accepted."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Parse and report without writing to the database.",
@@ -79,7 +88,13 @@ class Command(BaseCommand):
                 if options["sheet"] and options["sheet"].lower() not in ws.title.lower():
                     continue
                 stats = self._ingest_sheet(
-                    ws, path, industry, price_basis, level, options["dry_run"]
+                    ws,
+                    path,
+                    industry,
+                    price_basis,
+                    level,
+                    options["industry_total"],
+                    options["dry_run"],
                 )
                 if stats["rows"]:
                     totals["sheets"] += 1
@@ -135,16 +150,26 @@ class Command(BaseCommand):
             ) from exc
 
     @transaction.atomic
-    def _ingest_sheet(self, ws, path, industry, price_basis, level, dry_run):
+    def _ingest_sheet(
+        self, ws, path, industry, price_basis, level, industry_total, dry_run
+    ):
         stats = {"rows": 0, "years": set(), "new_geographies": 0}
         layout = detect_layout(ws)
         if layout is None:
             return stats
 
+        wanted = {industry_total.strip().lower(), "all industries"}
         for row in ws.iter_rows(min_row=layout.header_row + 1):
             code_cell = row[layout.code_col - 1] if layout.code_col - 1 < len(row) else None
             if code_cell is None or not is_geocode(code_cell.value):
                 continue
+            # When the sheet breaks GVA down by industry, keep only the
+            # all-industries total row (otherwise every industry row would
+            # overwrite the same TOTAL record).
+            if layout.industry_col and layout.industry_col - 1 < len(row):
+                cell = row[layout.industry_col - 1]
+                if str(cell.value or "").strip().lower() not in wanted:
+                    continue
             code = str(code_cell.value).strip()
             name = ""
             if layout.name_col and layout.name_col - 1 < len(row):
