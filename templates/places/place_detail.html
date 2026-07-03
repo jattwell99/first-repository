@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ place.name }} — GVA per head{% endblock %}
+
+{% block content %}
+  <p class="muted"><a href="/places/">← All places</a></p>
+  <h1>{{ place.name }}</h1>
+  <p class="muted">
+    {{ place.code }} · {{ place.level.name }}
+    {% if place.parent %} · {{ place.parent.name }}{% endif %}
+  </p>
+
+  {% if latest %}
+    <p>
+      Latest ({{ latest.year }}):
+      <strong>£{{ latest.gva_per_head_gbp|floatformat:0 }}</strong> per head
+      <span class="muted">
+        (£{{ latest.gva_gbp_million|floatformat:0 }}m GVA,
+        population {{ latest.population }})
+      </span>
+    </p>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th class="num">Year</th>
+        <th class="num">GVA (£m)</th>
+        <th class="num">Population</th>
+        <th class="num">GVA per head</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in series %}
+        <tr>
+          <td class="num">{{ row.year }}</td>
+          <td class="num">{{ row.gva_gbp_million|floatformat:0 }}</td>
+          <td class="num">{{ row.population }}</td>
+          <td class="num">£{{ row.gva_per_head_gbp|floatformat:0 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">
+          No GVA-per-head figures yet. Ingest data and run
+          <code>derive_per_head</code>.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

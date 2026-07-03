@@ -1,75 +1,102 @@
-<header>
+# UK economy model
 
-<!--
-  <<< Author notes: Course header >>>
-  Include a 1280×640 image, course title in sentence case, and a concise description in emphasis.
-  In your repository settings: enable template repository, add your 1280×640 social image, auto delete head branches.
-  Add your open source license, GitHub uses MIT license.
--->
+A small Django application for exploring **GVA per head** across UK places
+(Local Authority Districts and Westminster Parliamentary Constituencies),
+built from ONS open data.
 
-# Introduction to GitHub
+It ingests two ONS sources:
 
-_Get started using GitHub in less than an hour._
+- **Regional GVA (balanced) by local authority** — gross value added in £m
+- **Mid-year population estimates by local authority**
 
-</header>
+and derives **GVA per head** = `GVA (£m) × 1,000,000 / population`, which the
+`/places/` page ranks and lets you drill into per place.
 
-<!--
-  <<< Author notes: Step 1 >>>
-  Choose 3-5 steps for your course.
-  The first step is always the hardest, so pick something easy!
-  Link to docs.github.com for further explanations.
-  Encourage users to open new tabs for steps!
--->
+## Quickstart
 
-## Step 1: Create a branch
+```bash
+git clone https://github.com/jattwell99/UK-economy-model && cd UK-economy-model
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+docker compose up -d db          # Postgres
+cp .env.example .env
+python manage.py migrate
+python manage.py seed_v1 --dimensions --geography   # dimensions + LAD/WPC boundaries
+# then ingest your ONS workbooks into data/gva/ :
+python manage.py ingest_gva --path data/gva/
+python manage.py ingest_population --path data/gva/populationestimatesbylocalauthority.xlsx --vintage 2020-06-mye
+python manage.py derive_per_head
+python manage.py runserver        # → http://127.0.0.1:8000/places/
+```
 
-_Welcome to "Introduction to GitHub"! :wave:_
+> **No Postgres / no data yet?** The project falls back to a local SQLite
+> file when `DATABASE_URL` is unset, and you can load an illustrative dataset
+> to see the UI immediately:
+>
+> ```bash
+> python manage.py migrate
+> python manage.py seed_v1 --dimensions --geography --demo
+> python manage.py derive_per_head
+> python manage.py runserver
+> ```
+>
+> The `--demo` figures are **order-of-magnitude illustrations, not official
+> statistics** — replace them by ingesting the real ONS workbooks.
 
-**What is GitHub?**: GitHub is a collaboration platform that uses _[Git](https://docs.github.com/get-started/quickstart/github-glossary#git)_ for versioning. GitHub is a popular place to share and contribute to [open-source](https://docs.github.com/get-started/quickstart/github-glossary#open-source) software.
-<br>:tv: [Video: What is GitHub?](https://www.youtube.com/watch?v=pBy1zgt0XPc)
+## Data model
 
-**What is a repository?**: A _[repository](https://docs.github.com/get-started/quickstart/github-glossary#repository)_ is a project containing files and folders. A repository tracks versions of files and folders. For more information, see "[About repositories](https://docs.github.com/en/repositories/creating-and-managing-repositories/about-repositories)" from GitHub Docs.
+| App | Model | Purpose |
+| --- | --- | --- |
+| `geography` | `GeographyLevel` | LAD / WPC / region / country tiers |
+| `geography` | `Geography` | one statistical area (ONS code, name, parent, centroid) |
+| `economy` | `Industry`, `PriceBasis` | dimensions (SIC section; current / chained volume) |
+| `economy` | `GvaValue` | GVA (£m) per geography × industry × price basis × year |
+| `economy` | `PopulationVintage`, `PopulationValue` | population by release and year |
+| `economy` | `GvaPerHead` | derived £/head per geography × year |
 
-**What is a branch?**: A _[branch](https://docs.github.com/en/get-started/quickstart/github-glossary#branch)_ is a parallel version of your repository. By default, your repository has one branch named `main` and it is considered to be the definitive branch. Creating additional branches allows you to copy the `main` branch of your repository and safely make any changes without disrupting the main project. Many people use branches to work on specific features without affecting any other parts of the project.
+## Management commands
 
-Branches allow you to separate your work from the `main` branch. In other words, everyone's work is safe while you contribute. For more information, see "[About branches](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-branches)".
+| Command | What it does |
+| --- | --- |
+| `seed_v1 --dimensions` | Seed geography levels, industries, price bases |
+| `seed_v1 --geography` | Seed a curated sample of LADs, constituencies, regions |
+| `seed_v1 --demo` | Load illustrative GVA + population (for the UI only) |
+| `ingest_gva --path <file\|dir>` | Read ONS balanced-GVA-by-LAD workbook(s) |
+| `ingest_population --path <file> --vintage <code>` | Read ONS population estimates |
+| `derive_per_head [--vintage <code>]` | Compute GVA per head |
 
-**What is a profile README?**: A _[profile README](https://docs.github.com/account-and-profile/setting-up-and-managing-your-github-profile/customizing-your-profile/managing-your-profile-readme)_ is essentially an "About me" section on your GitHub profile where you can share information about yourself with the community on GitHub.com. GitHub shows your profile README at the top of your profile page. For more information, see "[Managing your profile README](https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/customizing-your-profile/managing-your-profile-readme)".
+The ingest commands detect the ONS header row and year columns heuristically
+(see `economy/management/commands/_xlsx.py`), so they tolerate the layout
+differences between releases. Any geography code they meet that isn't already
+seeded is created automatically (as an LAD by default; override with
+`--level`). Pass `--dry-run` to parse and report without writing.
 
-![profile-readme-example](/images/profile-readme-example.png)
+Get the source workbooks from the ONS:
 
-### :keyboard: Activity: Your first branch
+- <https://www.ons.gov.uk/economy/grossvalueaddedgva>
+- <https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates>
 
-1. Open a new browser tab and navigate to your newly made repository. Then, work on the steps in your second tab while you read the instructions in this tab.
-2. Navigate to the **< > Code** tab in the header menu of your repository.
+## Configuration
 
-   ![code-tab](/images/code-tab.png)
+Settings are read from the environment (see `.env.example`):
 
-3. Click on the **main** branch drop-down.
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `DJANGO_SECRET_KEY` | dev key | set a real value in production |
+| `DJANGO_DEBUG` | `False` | |
+| `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` | comma-separated |
+| `DATABASE_URL` | SQLite file | e.g. `postgres://user:pass@host:5432/db` |
 
-   ![main-branch-dropdown](/images/main-branch-dropdown.png)
+## Layout
 
-4. In the field, name your branch `my-first-branch`. In this case, the name must be `my-first-branch` to trigger the course workflow.
-5. Click **Create branch: my-first-branch** to create your branch.
+```
+config/     Django project (settings, urls, wsgi/asgi)
+geography/  geography dimension + seed_v1 command
+economy/    GVA / population / per-head models + ingest & derive commands
+places/     the /places/ views and templates
+data/gva/   drop ONS workbooks here (git-ignored)
+```
 
-   ![create-branch-button](/images/create-branch-button.png)
+## License
 
-   The branch will automatically switch to the one you have just created.
-   The **main** branch drop-down bar will reflect your new branch and display the new branch name.
-
-6. Wait about 20 seconds then refresh this page (the one you're following instructions from). [GitHub Actions](https://docs.github.com/en/actions) will automatically update to the next step.
-
-<footer>
-
-<!--
-  <<< Author notes: Footer >>>
-  Add a link to get support, GitHub status page, code of conduct, license link.
--->
-
----
-
-Get help: [Post in our discussion board](https://github.com/orgs/skills/discussions/categories/introduction-to-github) &bull; [Review the GitHub status page](https://www.githubstatus.com/)
-
-&copy; 2024 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
-
-</footer>
+[MIT](LICENSE)

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Places — GVA per head{% endblock %}
+
+{% block content %}
+  <h1>GVA per head by place</h1>
+  <p class="muted">Latest available year, gross value added (balanced) per head.</p>
+
+  {% if levels %}
+    <nav class="levels">
+      {% for code, name in levels %}
+        <a href="?level={{ code }}" class="{% if code == level %}active{% endif %}">{{ name }}</a>
+      {% endfor %}
+    </nav>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Place</th>
+        <th>Code</th>
+        <th>Region</th>
+        <th class="num">Year</th>
+        <th class="num">GVA per head</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for place in places %}
+        <tr>
+          <td class="num">{{ forloop.counter }}</td>
+          <td><a href="{% url 'places:detail' place.code %}">{{ place.name }}</a></td>
+          <td class="muted">{{ place.code }}</td>
+          <td>{{ place.parent.name|default:"—" }}</td>
+          <td class="num">{{ place.latest_year|default:"—" }}</td>
+          <td class="num">
+            {% if place.latest_per_head is not None %}
+              £{{ place.latest_per_head|floatformat:0 }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6">
+          No places for this level yet. Run
+          <code>seed_v1 --geography</code> and ingest data, or
+          <code>seed_v1 --demo</code> then <code>derive_per_head</code>.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

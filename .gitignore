@@ -35,3 +35,20 @@
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Python / Django #
+###################
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.env
+db.sqlite3
+/staticfiles/
+
+# Data workbooks (ingest locally; do not commit large ONS files) #
+##################################################################
+/data/gva/*.xlsx
+/data/gva/*.xls
+/data/gva/*.csv
